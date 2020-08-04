@@ -21,7 +21,7 @@ public class DummyLoadManager implements LoadManager {
 
 	@Override
 	public double calculateLoad(Kms kms) {
-		return 1;
+		return kms.getKurentoSessions().size();
 	}
 
 }

@@ -33,26 +33,31 @@ public class FixedOneKmsManager extends KmsManager {
 
 	@Override
 	public List<Kms> initializeKurentoClients(List<KmsProperties> kmsProperties, boolean disconnectUponFailure) throws Exception {
-		KmsProperties firstProps = kmsProperties.get(0);
+		for (int i = 0; i < kmsProperties.size(); i++) {
+			KmsProperties property = kmsProperties.get(i);
+			initializeKMSClient(property);
+		}
+		return new ArrayList<Kms>(kmss.values());
+	}
+
+	public void initializeKMSClient(KmsProperties kmsProperty) throws Exception {
 		KurentoClient kClient = null;
-		Kms kms = new Kms(firstProps, loadManager);
+		Kms kms = new Kms(kmsProperty, loadManager);
 		try {
-			kClient = KurentoClient.create(firstProps.getUri(), this.generateKurentoConnectionListener(kms.getId()));
+			kClient = KurentoClient.create(kmsProperty.getUri(), this.generateKurentoConnectionListener(kms.getId()));
 			this.addKms(kms);
 			kms.setKurentoClient(kClient);
 
 			// TODO: This should be done in KurentoClient connected event
 			kms.setKurentoClientConnected(true);
 			kms.setTimeOfKurentoClientConnection(System.currentTimeMillis());
-
 		} catch (KurentoException e) {
-			log.error("KMS in {} is not reachable by OpenVidu Server", firstProps.getUri());
+			log.error("KMS in {} is not reachable by OpenVidu Server", kmsProperty.getUri());
 			if (kClient != null) {
 				kClient.destroy();
 			}
 			throw new Exception();
 		}
-		return Arrays.asList(kms);
 	}
 
 	@Override
