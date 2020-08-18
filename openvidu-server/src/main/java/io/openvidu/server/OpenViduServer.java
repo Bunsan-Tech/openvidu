@@ -99,8 +99,9 @@ public class OpenViduServer implements JsonRpcConfigurer {
 		if (openviduConfig.getKmsUris().isEmpty()) {
 			throw new IllegalArgumentException("'KMS_URIS' should contain at least one KMS url");
 		}
-		String firstKmsWsUri = openviduConfig.getKmsUris().get(0);
-		log.info("OpenVidu Server using one KMS: {}", firstKmsWsUri);
+		for (String kmsWsUri : openviduConfig.getKmsUris()) {
+			log.info("OpenVidu server will use KMS: {}", kmsWsUri);
+		}
 		return new FixedOneKmsManager();
 	}
 
