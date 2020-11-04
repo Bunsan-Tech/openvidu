@@ -87,6 +87,70 @@ public class SessionRestController {
 	@Autowired
 	private OpenviduConfig openviduConfig;
 
+	@RequestMapping(value = "/health/status", method = RequestMethod.GET)
+	public ResponseEntity<?> healthStatus(@RequestBody(required = false) Map<?, ?> params) {
+		log.info("REST API: GET /health/status {}");
+		SessionProperties.Builder builder = new SessionProperties.Builder();
+		String customSessionId = "e95fb02b-57ab-42d2-b809-9223292b5bc8";
+		if (sessionManager.getSessionWithNotActive(customSessionId) != null) {
+			return new ResponseEntity<>(HttpStatus.CONFLICT);
+		}
+		String defaultCustomLayout = "";
+		builder.recordingMode(RecordingMode.MANUAL)
+			.defaultOutputMode(OutputMode.COMPOSED)
+			.defaultRecordingLayout(RecordingLayout.BEST_FIT)
+			.mediaMode(MediaMode.ROUTED)
+			.customSessionId(customSessionId)
+			.defaultCustomLayout((defaultCustomLayout != null) ? defaultCustomLayout : "");
+
+		SessionProperties sessionProperties = builder.build();
+		String sessionId;
+		sessionId = customSessionId;
+		Session sessionNotActive = sessionManager.storeSessionNotActive(sessionId, sessionProperties);
+		log.info("New session {} initialized {}", sessionId, this.sessionManager.getSessionsWithNotActive().stream()
+				.map(Session::getSessionId).collect(Collectors.toList()).toString());
+
+		Session session = this.sessionManager.getSession(sessionId);
+		if (session != null) {
+			this.sessionManager.closeSession(sessionId, EndReason.sessionClosedByServer);
+			JsonObject responseJson = new JsonObject();
+			responseJson.addProperty("healthy", true);
+			return new ResponseEntity<>(responseJson.toString(), getResponseHeaders(), HttpStatus.OK);
+		}
+
+		sessionNotActive = this.sessionManager.getSessionNotActive(sessionId);
+		if (sessionNotActive != null) {
+			try {
+				if (sessionNotActive.closingLock.writeLock().tryLock(15, TimeUnit.SECONDS)) {
+					try {
+						if (sessionNotActive.isClosed()) {
+							return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+						}
+						this.sessionManager.closeSessionAndEmptyCollections(sessionNotActive,
+								EndReason.sessionClosedByServer, true);
+								JsonObject responseJson = new JsonObject();
+								responseJson.addProperty("healthy", true);
+								return new ResponseEntity<>(responseJson.toString(), getResponseHeaders(), HttpStatus.OK);
+					} finally {
+						sessionNotActive.closingLock.writeLock().unlock();
+					}
+				} else {
+					String errorMsg = "Timeout waiting for Session " + sessionId
+							+ " closing lock to be available for closing from DELETE /api/sessions";
+					log.error(errorMsg);
+					return this.generateErrorResponse(errorMsg, "/api/sessions", HttpStatus.BAD_REQUEST);
+				}
+			} catch (InterruptedException e) {
+				String errorMsg = "InterruptedException while waiting for Session " + sessionId
+						+ " closing lock to be available for closing from DELETE /api/sessions";
+				log.error(errorMsg);
+				return this.generateErrorResponse(errorMsg, "/api/sessions", HttpStatus.BAD_REQUEST);
+			}
+		} else {
+			return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+		}
+	}
+
 	@RequestMapping(value = "/sessions", method = RequestMethod.POST)
 	public ResponseEntity<?> getSessionId(@RequestBody(required = false) Map<?, ?> params) {
 
